@@ -122,7 +122,6 @@ symptom-recommender.ipynb    Data preparation, basic and advanced recommenders
 patient_symptoms.csv         Raw patient data (1,000 rows)
 preprocessed_data.csv        Gender, age, and symptom list (1,000 rows)
 requirements.txt             Python packages
-output.pdf                   Screenshots of the API running in Swagger UI
 ```
 
 ## Limits
