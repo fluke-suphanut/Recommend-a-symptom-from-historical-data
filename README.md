@@ -1,32 +1,89 @@
 # Recommend a symptom from historical data
 
-![แบนเนอร์: หูฟังแพทย์ใต้เครือข่ายจุดที่เชื่อมกัน ซึ่งนำไปสู่ดาวระเบิดสีแดง](docs/banner.png)
+![Banner: a stethoscope under a network of connected dots that leads to a red starburst](docs/banner.png)
 
-โปรเจกต์นี้พัฒนาระบบ **แนะนำอาการ** จากข้อมูลผู้ป่วยย้อนหลัง  
-เมื่อผู้ใช้ระบุข้อมูลส่วนตัว (เพศ, อายุ) และอาการที่มี ระบบจะเสนออาการเพิ่มเติมที่ผู้ป่วยซึ่งมีลักษณะคล้ายกันเคยรายงาน
+This project suggests more symptoms to a user, based on the symptoms that past patients reported together.
 
-## Data Preparation
+Portfolio: https://suphanut.pages.dev
 
-- ทำความสะอาดและเตรียมข้อมูลผู้ป่วย 1,000 ราย
-- แปลง `search_term` ให้เป็นรายการอาการ (list)
-- เข้ารหัสเพศ (ชาย=0, หญิง=1)
+## What it does
 
-## Basic Recommender
+The user gives their gender, age, and current symptoms. The system suggests other symptoms that patients with matching symptoms reported.
 
-- ค้นหาผู้ป่วยที่มีอาการบางส่วนเหมือนกับผู้ใช้
-- แนะนำอาการที่มักเกิดร่วมกัน แต่ผู้ใช้ยังไม่ได้เลือก
+### Data preparation (notebook)
 
-## Advanced Recommender
+`symptom-recommender.ipynb` prepares the data:
 
-- แปลงอาการเป็นเวกเตอร์ด้วย `MultiLabelBinarizer`
-- จัดกลุ่มผู้ป่วยด้วย `KMeans` จำนวน 5 กลุ่ม
-- แนะนำอาการที่พบมากในกลุ่มเดียวกัน
+- Loads `patient_symptoms.csv`: 1,000 patient records with gender, age, a symptom summary, and search terms.
+- Encodes gender: male is `0`, female is `1`.
+- Splits the comma-separated `search_term` column into a list of unique symptoms.
+- Counts the 10 most common symptoms.
+- Saves gender, age, and the symptom list to `preprocessed_data.csv`.
 
-## API Interface
+### Basic recommender (API and notebook)
 
-**Method:** `POST`  
-**Description:** แนะนำอาการเพิ่มเติมจากอาการที่ผู้ใช้กรอก โดยใช้วิธี Content-Based Filtering
-**Example Input**
+- Finds past patients who share at least one symptom with the user.
+- Collects all symptoms from those patients.
+- Removes the symptoms the user already gave.
+- Returns up to 5 of the remaining symptoms.
+
+### Advanced recommender (notebook only)
+
+- Turns each symptom list into a binary vector with `MultiLabelBinarizer`, and adds gender and age.
+- Groups the patients into 5 clusters with `KMeans`.
+- Puts the user into a cluster and suggests symptoms from patients in the same cluster.
+
+The API does not include this recommender.
+
+### API
+
+`api_main.py` is a FastAPI app with one endpoint:
+
+| Method | Path | Body | Response |
+| --- | --- | --- | --- |
+| POST | `/recommend` | `gender` (text), `age` (number), `symptoms` (list of text) | `{"recommendations": [...]}` with up to 5 symptoms |
+
+The API maps `"male"` to `0` and any other gender value to `1`. Symptom names must match the names in the dataset exactly. Most names are in Thai.
+
+## Why
+
+The goal is a symptom recommender built from historical patient data. When a user enters personal details and their symptoms, the system shows symptoms that similar past patients also reported.
+
+## Tech stack
+
+- Python 3.9 or later
+- FastAPI (REST API) and Uvicorn (API server)
+- pandas (data handling)
+- scikit-learn (`MultiLabelBinarizer` and `KMeans`, in the notebook)
+- Jupyter Notebook
+
+## How to run
+
+1. Install the packages:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Start the API server from the repository root. `recommender.py` loads `preprocessed_data.csv` from the current folder:
+
+   ```bash
+   uvicorn api_main:app --reload
+   ```
+
+3. Open http://127.0.0.1:8000/docs in your browser. Swagger UI lets you send test requests: select **Try it out**, enter the JSON body, and select **Execute**.
+
+To run the data preparation and the advanced recommender, open the notebook:
+
+```bash
+jupyter notebook symptom-recommender.ipynb
+```
+
+The project uses no environment variables.
+
+## Example
+
+`POST /recommend` request:
 
 ```json
 {
@@ -36,61 +93,51 @@
 }
 ```
 
-**Example Output**
+Response. The symptoms come from the dataset, but this list is made up. The real list and its order can change. See [Limits](#limits).
 
 ```json
 {
-  "recommendations": ["ไข้", "แน่นจมูก", "เจ็บคอ"]
+  "recommendations": ["เจ็บคอ", "น้ำมูกไหล", "ไข้", "คัดจมูก", "เสมหะไหลลงคอ"]
 }
 ```
 
-## recommend-advanced
+Translations of the symptom names:
 
-Method: POST
-Description: แนะนำอาการจากกลุ่มผู้ป่วยที่มีลักษณะคล้ายกัน
-**Example Input**
+| Symptom | English |
+| --- | --- |
+| `ไอ` | cough |
+| `มีเสมหะ` | has phlegm |
+| `เจ็บคอ` | sore throat |
+| `น้ำมูกไหล` | runny nose |
+| `ไข้` | fever |
+| `คัดจมูก` | stuffy nose |
+| `เสมหะไหลลงคอ` | phlegm running down the throat |
 
-```json
-{
-  "gender": "female",
-  "age": 30,
-  "symptoms": ["ไอ", "มีเสมหะ"]
-}
+## Project structure
+
+```text
+api_main.py                  FastAPI app with POST /recommend
+recommender.py               Basic recommender used by the API
+symptom-recommender.ipynb    Data preparation, basic and advanced recommenders
+patient_symptoms.csv         Raw patient data (1,000 rows)
+preprocessed_data.csv        Gender, age, and symptom list (1,000 rows)
+requirements.txt             Python packages
+output.pdf                   Screenshots of the API running in Swagger UI
 ```
 
-**Example Output**
+## Limits
 
-```json
-{
-  "recommendations": ["Fever", "แน่นจมูก", "เสมหะไหลลงคอ"]
-}
-```
+- The API ignores gender and age. `recommend_symptoms()` accepts them but matches on symptoms only.
+- The results are not sorted by how often symptoms occur together. The code removes duplicates before it counts, so every symptom has a count of 1. The 5 symptoms returned are an arbitrary subset, and they can change after a server restart.
+- The advanced recommender in the notebook has the same counting problem. It also uses raw age next to 0 and 1 symptom values, so age has a large effect on the clusters.
+- A user who shares one common symptom, such as a cough, matches many patients. The suggestions can then include unrelated symptoms.
+- Symptom names must match exactly. Some dataset entries join two symptoms without a separator.
+- `recommender.py` and the notebook call `eval()` on CSV content. Use only CSV files you trust.
+- The API does not validate input. An empty symptom list returns an empty list.
+- This project is not a medical tool. Do not use it to make health decisions.
 
-## Install dependencies
+## Licence
 
-```bash
-pip install -r requirements.txt
-```
+This repository has no licence file, so default copyright applies.
 
-## Start API Server
-
-```bash
-uvicorn api_main:app --reload
-```
-
-## Test API
-
-เปิดเบราว์เซอร์ไปที่ http://127.0.0.1:8000/docs
-เพื่อใช้งาน Swagger UI และทดสอบ API
-
-## Tech Stack
-
-- Python 3.10+
-- FastAPI – ใช้สร้าง REST API
-- scikit-learn – ใช้จัดกลุ่มด้วย KMeans
-- pandas – จัดการและวิเคราะห์ข้อมูล
-- Uvicorn – รัน API Server
-
-## output
-
-[here](output.pdf)
+`patient_symptoms.csv` and `preprocessed_data.csv` contain patient symptom records. The repository does not say where this data comes from or under what terms you can use it.
